@@ -1,5 +1,12 @@
 # Construction App (Data Service)
 
+# Tech Stack
+
+ * Spring Boot
+ * Spring Data REST
+ * H2 database
+      
+           
 
 # Data
 
