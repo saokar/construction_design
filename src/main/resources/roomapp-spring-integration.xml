@@ -1,0 +1,67 @@
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:context="http://www.springframework.org/schema/context" xmlns:int="http://www.springframework.org/schema/integration"
+	xmlns:int-jms="http://www.springframework.org/schema/integration/jms" xmlns:int-stream="http://www.springframework.org/schema/integration/stream"
+	xmlns:int-event="http://www.springframework.org/schema/integration/event" xmlns:int-http="http://www.springframework.org/schema/integration/http"
+	xmlns:int-ws="http://www.springframework.org/schema/integration/ws" xmlns:int-mongodb="http://www.springframework.org/schema/integration/mongodb"
+	xmlns:int-mail="http://www.springframework.org/schema/integration/mail" xmlns:oxm="http://www.springframework.org/schema/oxm"
+	xsi:schemaLocation="
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd
+        http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration-3.0.xsd
+        http://www.springframework.org/schema/integration/jms http://www.springframework.org/schema/integration/jms/spring-integration-jms-3.0.xsd
+        http://www.springframework.org/schema/integration/stream http://www.springframework.org/schema/integration/stream/spring-integration-stream-3.0.xsd
+        http://www.springframework.org/schema/integration/event http://www.springframework.org/schema/integration/event/spring-integration-event-3.0.xsd
+        http://www.springframework.org/schema/integration/http http://www.springframework.org/schema/integration/http/spring-integration-http-3.0.xsd
+        http://www.springframework.org/schema/integration/ws http://www.springframework.org/schema/integration/ws/spring-integration-ws-3.0.xsd
+        http://www.springframework.org/schema/integration/mongodb http://www.springframework.org/schema/integration/mongodb/spring-integration-mongodb-3.0.xsd
+        http://www.springframework.org/schema/integration/mail http://www.springframework.org/schema/integration/mail/spring-integration-mail-3.0.xsd
+        http://www.springframework.org/schema/integration/http http://www.springframework.org/schema/integration/http/spring-integration-http.xsd
+        http://www.springframework.org/schema/oxm http://www.springframework.org/schema/oxm/spring-oxm-3.0.xsd">
+
+	<context:component-scan base-package="com.hello" />
+	<!-- STEP 0 Starting point -->
+
+	<int:http:inbound-channel-adapter id="httpInboundAdapter" channel="roomApplicationRequestChannel"
+		path="/roomApplication/{roomId}" supported-methods="GET" request-payload-type="com.hello.dto.RoomRequestDTO">
+		<int-http:request-mapping consumes="application/json" />
+	</int-http:inbound-channel-adapter>
+
+	<int:channel id="roomApplicationRequestChannel">
+		<int:dispatcher task-executor="roomApplicationRequestExecutor" />
+	</int:channel>
+	<int:task:executor id="roomApplicationRequestExecutor" queue-capacity="150" pool-size="5-50" />
+
+	<int:header-enricher input-channel="roomApplicationRequestChannel" output-channel="roomDataServiceRequestChannel">
+		<int:header name="REQUEST_CORRELATION_ID" expression="T(java.util.UUID).randomUUID().toString()" />
+	</int:header-enricher>
+
+
+	<!-- Invoke Room Data REST Service -->
+
+	<int:chain input-channel="roomDataServiceRequestChannel">
+		<int-http:outbound-gateway url="https://boiling-castle-84799.herokuapp.com/room/{roomId}"
+			expected-response-type="java.lang.String" http-method="GET" charset="UTF-8" />
+	     <int-http:uri-variable name="roomId" expression="payload"/>
+		<int:json-to-object-transformer type="com.hello.RoomDTO" />
+		<int:service-activator ref="restResponseHandler" />
+		<int-stream:stdout-channel-adapter id="consoleOut" append-newline="true" />
+	</int:chain>
+
+
+	<!-- Error handling -->
+	<import resource="mongodb-config.xml" />
+
+	<int:chain input-channel="errorChannel">
+		<int:service-activator ref="mongodbRequestHandler" />
+		<int-mongodb:outbound-channel-adapter id="mongodbAdapter" collection-name="failedRequests"
+			mongodb-factory="mongoDbFactory" />
+	</int:chain>
+
+	<int:chain input-channel="errorChannel">
+		<int:service-activator ref="mailRequestHandler" />
+		<int-mail:outbound-channel-adapter mail-sender="mailSender" />
+	</int:chain>
+
+	<import resource="mail-config.xml" />
+
+</beans>

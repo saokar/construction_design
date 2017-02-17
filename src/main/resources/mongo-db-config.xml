@@ -1,0 +1,10 @@
+<bean id="mongoDbFactory" class="org.springframework.data.mongodb.core.SimpleMongoDbFactory">
+    <constructor-arg>
+        <bean class="com.mongodb.Mongo"/>
+    </constructor-arg>
+    <constructor-arg value="jcgdb"/>
+</bean>
+ 
+<bean id="mongoDbMessageStore" class="org.springframework.integration.mongodb.store.ConfigurableMongoDbMessageStore">
+    <constructor-arg ref="mongoDbFactory"/>
+</bean>
